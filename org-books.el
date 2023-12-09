@@ -418,29 +418,11 @@ See `org-map-entries' for argument documentation."
                           ,func))
                       ,match ,scope ,skip)))
 
-(defun org-books--get-active-books (&optional todo-keyword)
-  "Return books that are currently active. Each item returned is
-a pair of book name and position of the headline. Activity is
-assumed, by default, to be marked by READING TODO state."
-  (let ((active-todo-keyword "READING"))
-    (org-books-map-entries
-     (cons
-      (substring-no-properties (org-get-heading 'no-tags) (1+ (length (or todo-keyword active-todo-keyword))))
-      (point))
-     (format "TODO=\"%s\"" (or todo-keyword active-todo-keyword)))))
-
 ;;;###autoload
 (defun org-books-jump-to-reading ()
   (interactive)
-  (let ((active-books (org-books--get-active-books)))
-    (if (null active-books)
-        (message "No books currently being read.")
-      (let ((picked-book
-             (helm :sources (helm-build-sync-source "Active books"
-                              :candidates active-books)
-                   :buffer "*helm active books*")))
-        (find-file org-books-file)
-        (goto-char picked-book)))))
+  (switch-to-buffer (find-file-noselect org-books-file))
+  (consult-org-heading "/+READING"))
 
 ;;;###autoload
 (defun org-books-cliplink ()
