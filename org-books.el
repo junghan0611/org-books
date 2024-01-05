@@ -1,10 +1,10 @@
-;;; org-books.el --- Reading list management with Org mode and helm   -*- lexical-binding: t -*-
+;;; org-books.el --- Reading list management with Org mode -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2017 Abhinav Tushar
 
 ;; Author: Abhinav Tushar <abhinav@lepisma.xyz>
 ;; Version: 0.3.0
-;; Package-Requires: ((enlive "0.0.1") (s "1.11.0") (helm "2.9.2") (helm-org "1.0") (dash "2.14.1") (org "9.3") (emacs "29.1"))
+;; Package-Requires: ((enlive "0.0.1") (s "1.11.0") (dash "2.14.1") (org "9.3") (emacs "29.1"))
 ;; URL: https://github.com/lepisma/org-books
 ;; Keywords: outlines
 
@@ -34,8 +34,6 @@
 (require 'dash)
 (require 'enlive)
 (require 'json)
-(require 'helm)
-(require 'helm-org)
 (require 'org)
 (require 's)
 (require 'subr-x)
@@ -399,25 +397,6 @@ is not supported, throw an error."
        (-distinct)
        (-sort #'s-less-p))))
 
-(defun org-books-entry-p ()
-  "Tell if current entry is an org-books entry."
-  (if (org-entry-get nil "AUTHOR") t))
-
-(defun org-books-get-closed-time ()
-  "Return closed time of the current entry."
-  (let ((ent-body (buffer-substring-no-properties (org-entry-beginning-position) (org-entry-end-position))))
-    (if (string-match org-closed-time-regexp ent-body)
-        (parse-time-string (match-string-no-properties 1 ent-body)))))
-
-(defmacro org-books-map-entries (func &optional match scope &rest skip)
-  "Wrapper around `org-map-entries' that only works on org-books entries.
-See `org-map-entries' for argument documentation."
-  `(with-current-buffer (find-file-noselect org-books-file)
-     (org-map-entries (lambda ()
-                        (when (org-books-entry-p)
-                          ,func))
-                      ,match ,scope ,skip)))
-
 ;;;###autoload
 (defun org-books-jump-to-reading ()
   (interactive)
@@ -472,23 +451,14 @@ AUTHOR and properties from PROPS go as org-property."
            if tag collect tag into tags
            finally do (org-set-tags (-uniq tags))))
 
-(defun org-books--insert (level title author &optional props)
-  "Insert book template at current position in buffer.
-
-Formatting is specified by LEVEL, TITLE, AUTHOR and PROPS as
-described in docstring of `org-books-format' function."
-  (insert (org-books-format level title author props)))
-
-(defun org-books--insert-at-pos (pos title author &optional props)
-  "Goto POS in current buffer, insert a new entry and save buffer.
-
+(defun org-books--insert (title author &optional props)
+  "Under the current heading, insert a new entry and save buffer.
 TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
   (org-fold-show-all)
-  (goto-char pos)
-  (let ((level (or (org-current-level) 0)))
+  (let ((level (1+ (or (org-current-level) 0))))
     (org-books-goto-place)
     (save-excursion
-      (org-books--insert (+ level 1) title author props))
+      (insert (org-books-format level title author props)))
     (run-hooks 'org-books-after-insert-hook)
     (save-buffer)))
 
@@ -498,52 +468,29 @@ TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
       (org-next-visible-heading 1)
     (org-get-next-sibling)))
 
-(defun org-books-get-headers ()
-  "Return list of categories under which books can be filed.
-
-Each item in list is a pair of title (propertized) and marker
-specifying the position in the file."
-  (let ((helm-org-headings-max-depth org-books-file-depth))
-    (helm-org--get-candidates-in-file org-books-file helm-org-headings-fontify t nil t)))
+(defmacro with-org-books-file (&rest body)
+  "A convenience macro to execute BODY within `org-books-file'.
+Switches to the file and warns if it doesn't exist."
+  `(if org-books-file
+       (with-current-buffer (find-file-noselect org-books-file)
+         ,@body)
+     (message "org-books-file not set")))
 
 ;;;###autoload
 (defun org-books-add-book (title author &optional props)
   "Add a book (specified by TITLE and AUTHOR) to the `org-books-file'.
-
 Optionally apply PROPS."
-  (interactive
-   (let ((completion-ignore-case t))
-     (list
-      (read-string "Book Title: ")
-      (s-join ", " (completing-read-multiple "Author(s): " (org-books-all-authors))))))
-  (if org-books-file
-    (with-current-buffer (find-file-noselect org-books-file)
-      (let ((headers (org-books-get-headers)))
-        (if headers
-            (helm :sources (helm-build-sync-source "org-book categories"
-                             :candidates headers
-                             :action (lambda (pos) (org-books--insert-at-pos pos title author props)))
-                  :buffer "*helm org-books add*")
-          (goto-char (point-max))
-          (org-books--insert 1 title author props)
-          (save-buffer))))
-    (message "org-books-file not set")))
+  (interactive)
+  (with-org-books-file
+   (let ((match (format "level<=%d" org-books-file-depth)))
+     (consult-org-heading match)
+     (org-books--insert title author props))))
 
+;; TODO: write this next
 (defun org-books-add-many (url-ht)
   "Add many books at once (using links in the BOOK-URLS list) to the `org-books file'.
 Currently only supports LibraryThing."
-  (with-current-buffer (find-file-noselect org-books-file)
-    (let ((headers (org-books-get-headers))
-          (fn (ht-get url-ht :fn))
-          (book-urls (ht-get url-ht :urls)))
-      (helm :sources (helm-build-sync-source "org-book categories"
-                       :candidates headers
-                       :action (lambda (pos)
-                                 (dolist (url book-urls)
-                                   (apply #'org-books--insert-at-pos
-                                          pos
-                                          (funcall fn url)))))
-            :buffer "*helm org-books add*"))))
+  (message "Under construction..."))
 
 (defun org-books--safe-max (xs)
   "Extract the maximum value of XS with special provisions for nil and '(0).
