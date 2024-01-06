@@ -398,12 +398,6 @@ is not supported, throw an error."
        (-sort #'s-less-p))))
 
 ;;;###autoload
-(defun org-books-jump-to-reading ()
-  (interactive)
-  (switch-to-buffer (find-file-noselect org-books-file))
-  (consult-org-heading "/+READING"))
-
-;;;###autoload
 (defun org-books-cliplink ()
   "Clip link from clipboard."
   (interactive)
@@ -566,6 +560,14 @@ the rating and finish date are marked separately for each re-read."
            (rating-prop (org-books--format-property "MY-RATING" times-read)))
       (org-set-property rating-prop (number-to-string rating))
       (org-set-property finished-prop (org-books--today-string)))))
+
+;;;###autoload
+(defun org-books-jump-to-reading ()
+  "Jump to a book currently being read.
+Can be used from anywhere, not just org-books mode."
+  (interactive)
+  (with-org-books-file
+   (consult-org-heading "/+READING")))
 
 (provide 'org-books)
 ;;; org-books.el ends here
