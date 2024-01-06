@@ -448,13 +448,11 @@ AUTHOR and properties from PROPS go as org-property."
 (defun org-books--insert (title author &optional props)
   "Under the current heading, insert a new entry and save buffer.
 TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
-  (org-fold-show-all)
   (let ((level (1+ (or (org-current-level) 0))))
     (org-books-goto-place)
     (save-excursion
       (insert (org-books-format level title author props)))
-    (run-hooks 'org-books-after-insert-hook)
-    (save-buffer)))
+    (run-hooks 'org-books-after-insert-hook)))
 
 (defun org-books-goto-place ()
   "Move to the position where insertion should happen."
@@ -470,21 +468,37 @@ Switches to the file and warns if it doesn't exist."
          ,@body)
      (message "org-books-file not set")))
 
+(defun org-books--select-parent-heading ()
+  "Move to the heading under which the book(s) should be added.
+Currently using consult."
+  (let ((match (format "level<=%d" org-books-file-depth)))
+    (consult-org-heading match)))
+
 ;;;###autoload
 (defun org-books-add-book (title author &optional props)
   "Add a book (specified by TITLE and AUTHOR) to the `org-books-file'.
 Optionally apply PROPS."
   (interactive)
   (with-org-books-file
-   (let ((match (format "level<=%d" org-books-file-depth)))
-     (consult-org-heading match)
-     (org-books--insert title author props))))
+   (org-books--select-parent-heading)
+   (org-fold-show-all)
+   (org-books--insert title author props)
+   (save-buffer)))
 
-;; TODO: write this next
 (defun org-books-add-many (url-ht)
-  "Add many books at once (using links in the BOOK-URLS list) to the `org-books file'.
+  "Add many books at once (using links in the URL-HT table).
 Currently only supports LibraryThing."
-  (message "Under construction..."))
+  (interactive)
+  (let ((fn (map-elt url-ht :fn))
+        (urls (map-elt url-ht :urls)))
+    (with-org-books-file
+     (org-books--select-parent-heading)
+     (org-fold-show-all)
+     (dolist (url urls)
+       (let ((details (funcall fn url)))
+         (save-excursion
+           (apply #'org-books--insert details)))))
+    (save-buffer)))
 
 (defun org-books--safe-max (xs)
   "Extract the maximum value of XS with special provisions for nil and '(0).
