@@ -35,6 +35,8 @@
 (require 'enlive)
 (require 'json)
 (require 'org)
+(require 'consult)
+(require 'consult-org)
 (require 's)
 (require 'subr-x)
 (require 'url)
@@ -62,8 +64,8 @@
 
 (defcustom org-books-librarything-get-amazon-details t
   "Parse linked Amazon page when getting details from LibraryThing?
-Gets page number and year, if the latter is not present in the LibraryThing node.
-Slows down scraping."
+Gets page number and year, if the latter is not present in the
+LibraryThing node. Slows down scraping."
   :type 'boolean
   :group 'org-books)
 
@@ -74,8 +76,8 @@ Slows down scraping."
     ("openlibrary\\.org" . org-books-get-details-openlibrary)
     ("librarything\\.com/nseries" . org-books-librarything-series-get-urls)
     ("librarything\\.com" . org-books-get-details-librarything))
-  "Pairs of url patterns and functions taking url and returning
-book details. Check documentation of `org-books-get-details' for
+  "Pairs of url patterns and functions taking url and returning book details.
+Check documentation of `org-books-get-details' for
 return structure from these functions."
   :type '(alist :key-type string :value-type symbol)
   :group 'org-books)
@@ -85,7 +87,7 @@ return structure from these functions."
 The keys are the genres as written on Goodreads, and the values are the text
 of the tag to be assigned, e.g.:
 
-(\"Humor\" \"funny\")
+\(\"Humor\" \"funny\")
 
 Different genres can be assigned the same tag. Duplicate tags are removed
 by the `org-books-add-genre-tags' function during assignment."
@@ -122,6 +124,7 @@ PAGE-NODE is the return value of `enlive-fetch' on the page url."
         (list title author `(("AMAZON" . ,url))))))
 
 (defun org-books-fetch-node-safe (url)
+  "Fetch node from URL. Ask to retry on failure."
   (let ((node (enlive-fetch url)))
     (if (null node)
         (when (yes-or-no-p "Error in fetching url. Try again? ")
@@ -177,6 +180,7 @@ PAGE-NODE is the return value of `enlive-fetch' on the page url."
   (--filter (string= itemprop (enlive-attr it 'itemprop)) elements))
 
 (defun org-books-get-goodreads-title (page-node)
+  "Retrieve book title from PAGE-NODE of Goodreads page."
   (let ((title (org-books--clean-str (enlive-text (enlive-query page-node [h1]))))
         (series (org-books--clean-str (enlive-text (enlive-query page-node [.Text__title3 > a])))))
     (if (equal "" series)
@@ -338,6 +342,7 @@ If a series cannot be found, return nil."
        (first)))
 
 (defun org-books-get-librarything-amazon-url (page-node)
+  "Retrieve Amazon url from PAGE-NODE of a LibraryThing page."
   (-> page-node
       (enlive-query-all [.quicklinks_in_greenbox > div > a])
       (-third-item)
@@ -440,6 +445,7 @@ AUTHOR and properties from PROPS go as org-property."
     (buffer-string)))
 
 (defun org-books-add-genre-tags (genre-list)
+  "Add all tags from associations in GENRE-LIST to current heading."
   (cl-loop for genre in genre-list
            for tag = (map-elt org-books-genre-tag-associations genre)
            if tag collect tag into tags
@@ -521,7 +527,7 @@ finding the one with the highest index."
     (org-books--safe-max)))
 
 (defun org-books--format-property (name times-read)
-  "Return a property name string given its parameters.
+  "Return a property name string given its NAME and TIMES-READ number.
 Based on the number of times a book has been read,
 the string will either be a bare NAME, or NAME-N,
 where N is the current read count.
