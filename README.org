@@ -3,16 +3,18 @@
 #+AUTHOR: Andre Goderich
 
 Reading list management using org-mode.
-Original author: @lepisma (Abhinav Tushar): https://github.com/lepisma/org-books.
+Originally forked from https://github.com/lepisma/org-books by @lepisma (Abhinav Tushar),
+although by now there is little code in common between the two versions.
 
-This is my fork with some additional functionality I wanted for myself.
-All credit for the package goes to @lepisma.
-See the original version for a tutorial.
+This is my fork with some additional functionality I wanted for myself,
+All credit for the idea and original implementation goes to @lepisma.
+See the [[https://github.com/lepisma/org-books][original version]] for a tutorial.
 
 * Differences from the original version
 
+- New: *NO HELM.* The helm dependency has been dropped in favour of consult.
 - More details from Goodreads.
-  + New: automate genre tagging by customizing the =org-books-genre-tag-associations= variable! (More info below.)
+  + Automate genre tagging by customizing the =org-books-genre-tag-associations= variable! (More info below.)
 - Support for OpenLibrary and LibraryThing.
   + Can add whole series from Goodreads and LibraryThing (just use the series URL)!
   + When scraping from LibraryThing, optionally fetch additional data from Amazon automatically (see the =org-books-librarything-get-amazon-details= variable). Try with a series link for extra oomph!
@@ -61,7 +63,7 @@ Deduplication of tags is handled automatically during assignment.
 
 I rehauled the =org-books-rate-book= function and added a counterpart
 for beginning a book: =org-books-start-reading=.
-These function now do two things:
+These functions now do two things:
 
 - set the TODO state ('READING' or 'READ'),
 - add a timestamp to the book's properties.
@@ -85,3 +87,7 @@ Consider giving keybindings to the following functions:
     abandon ship and mark the book as unfinished.
 - =org-books-jump-to-reading=: quickly find a book with a READING status.
   You can use this anywhere, not just in the org-books file.
+
+A good way to use this package is by creating a derived =org-books-mode=,
+so that your org-books keybindings are safely contained within it,
+and do not interfere with your other org-mode workflows.

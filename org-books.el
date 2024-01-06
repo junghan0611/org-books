@@ -1,10 +1,10 @@
-;;; org-books.el --- Reading list management with Org mode and helm   -*- lexical-binding: t -*-
+;;; org-books.el --- Reading list management with Org mode -*- lexical-binding: t -*-
 
 ;; Copyright (C) 2017 Abhinav Tushar
 
 ;; Author: Abhinav Tushar <abhinav@lepisma.xyz>
 ;; Version: 0.3.0
-;; Package-Requires: ((enlive "0.0.1") (s "1.11.0") (helm "2.9.2") (helm-org "1.0") (dash "2.14.1") (org "9.3") (emacs "26.1"))
+;; Package-Requires: ((enlive "0.0.1") (s "1.11.0") (dash "2.14.1") (org "9.3") (emacs "29.1"))
 ;; URL: https://github.com/lepisma/org-books
 ;; Keywords: outlines
 
@@ -34,9 +34,9 @@
 (require 'dash)
 (require 'enlive)
 (require 'json)
-(require 'helm)
-(require 'helm-org)
 (require 'org)
+(require 'consult)
+(require 'consult-org)
 (require 's)
 (require 'subr-x)
 (require 'url)
@@ -64,8 +64,8 @@
 
 (defcustom org-books-librarything-get-amazon-details t
   "Parse linked Amazon page when getting details from LibraryThing?
-Gets page number and year, if the latter is not present in the LibraryThing node.
-Slows down scraping."
+Gets page number and year, if the latter is not present in the
+LibraryThing node. Slows down scraping."
   :type 'boolean
   :group 'org-books)
 
@@ -76,8 +76,8 @@ Slows down scraping."
     ("openlibrary\\.org" . org-books-get-details-openlibrary)
     ("librarything\\.com/nseries" . org-books-librarything-series-get-urls)
     ("librarything\\.com" . org-books-get-details-librarything))
-  "Pairs of url patterns and functions taking url and returning
-book details. Check documentation of `org-books-get-details' for
+  "Pairs of url patterns and functions taking url and returning book details.
+Check documentation of `org-books-get-details' for
 return structure from these functions."
   :type '(alist :key-type string :value-type symbol)
   :group 'org-books)
@@ -87,7 +87,7 @@ return structure from these functions."
 The keys are the genres as written on Goodreads, and the values are the text
 of the tag to be assigned, e.g.:
 
-(\"Humor\" \"funny\")
+\(\"Humor\" \"funny\")
 
 Different genres can be assigned the same tag. Duplicate tags are removed
 by the `org-books-add-genre-tags' function during assignment."
@@ -124,6 +124,7 @@ PAGE-NODE is the return value of `enlive-fetch' on the page url."
         (list title author `(("AMAZON" . ,url))))))
 
 (defun org-books-fetch-node-safe (url)
+  "Fetch node from URL. Ask to retry on failure."
   (let ((node (enlive-fetch url)))
     (if (null node)
         (when (yes-or-no-p "Error in fetching url. Try again? ")
@@ -179,6 +180,7 @@ PAGE-NODE is the return value of `enlive-fetch' on the page url."
   (--filter (string= itemprop (enlive-attr it 'itemprop)) elements))
 
 (defun org-books-get-goodreads-title (page-node)
+  "Retrieve book title from PAGE-NODE of Goodreads page."
   (let ((title (org-books--clean-str (enlive-text (enlive-query page-node [h1]))))
         (series (org-books--clean-str (enlive-text (enlive-query page-node [.Text__title3 > a])))))
     (if (equal "" series)
@@ -340,6 +342,7 @@ If a series cannot be found, return nil."
        (first)))
 
 (defun org-books-get-librarything-amazon-url (page-node)
+  "Retrieve Amazon url from PAGE-NODE of a LibraryThing page."
   (-> page-node
       (enlive-query-all [.quicklinks_in_greenbox > div > a])
       (-third-item)
@@ -399,49 +402,6 @@ is not supported, throw an error."
        (-distinct)
        (-sort #'s-less-p))))
 
-(defun org-books-entry-p ()
-  "Tell if current entry is an org-books entry."
-  (if (org-entry-get nil "AUTHOR") t))
-
-(defun org-books-get-closed-time ()
-  "Return closed time of the current entry."
-  (let ((ent-body (buffer-substring-no-properties (org-entry-beginning-position) (org-entry-end-position))))
-    (if (string-match org-closed-time-regexp ent-body)
-        (parse-time-string (match-string-no-properties 1 ent-body)))))
-
-(defmacro org-books-map-entries (func &optional match scope &rest skip)
-  "Wrapper around `org-map-entries' that only works on org-books entries.
-See `org-map-entries' for argument documentation."
-  `(with-current-buffer (find-file-noselect org-books-file)
-     (org-map-entries (lambda ()
-                        (when (org-books-entry-p)
-                          ,func))
-                      ,match ,scope ,skip)))
-
-(defun org-books--get-active-books (&optional todo-keyword)
-  "Return books that are currently active. Each item returned is
-a pair of book name and position of the headline. Activity is
-assumed, by default, to be marked by READING TODO state."
-  (let ((active-todo-keyword "READING"))
-    (org-books-map-entries
-     (cons
-      (substring-no-properties (org-get-heading 'no-tags) (1+ (length (or todo-keyword active-todo-keyword))))
-      (point))
-     (format "TODO=\"%s\"" (or todo-keyword active-todo-keyword)))))
-
-;;;###autoload
-(defun org-books-jump-to-reading ()
-  (interactive)
-  (let ((active-books (org-books--get-active-books)))
-    (if (null active-books)
-        (message "No books currently being read.")
-      (let ((picked-book
-             (helm :sources (helm-build-sync-source "Active books"
-                              :candidates active-books)
-                   :buffer "*helm active books*")))
-        (find-file org-books-file)
-        (goto-char picked-book)))))
-
 ;;;###autoload
 (defun org-books-cliplink ()
   "Clip link from clipboard."
@@ -485,30 +445,20 @@ AUTHOR and properties from PROPS go as org-property."
     (buffer-string)))
 
 (defun org-books-add-genre-tags (genre-list)
+  "Add all tags from associations in GENRE-LIST to current heading."
   (cl-loop for genre in genre-list
            for tag = (map-elt org-books-genre-tag-associations genre)
            if tag collect tag into tags
            finally do (org-set-tags (-uniq tags))))
 
-(defun org-books--insert (level title author &optional props)
-  "Insert book template at current position in buffer.
-
-Formatting is specified by LEVEL, TITLE, AUTHOR and PROPS as
-described in docstring of `org-books-format' function."
-  (insert (org-books-format level title author props)))
-
-(defun org-books--insert-at-pos (pos title author &optional props)
-  "Goto POS in current buffer, insert a new entry and save buffer.
-
+(defun org-books--insert (title author &optional props)
+  "Under the current heading, insert a new entry and save buffer.
 TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
-  (org-fold-show-all)
-  (goto-char pos)
-  (let ((level (or (org-current-level) 0)))
+  (let ((level (1+ (or (org-current-level) 0))))
     (org-books-goto-place)
     (save-excursion
-      (org-books--insert (+ level 1) title author props))
-    (run-hooks 'org-books-after-insert-hook)
-    (save-buffer)))
+      (insert (org-books-format level title author props)))
+    (run-hooks 'org-books-after-insert-hook)))
 
 (defun org-books-goto-place ()
   "Move to the position where insertion should happen."
@@ -516,52 +466,45 @@ TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
       (org-next-visible-heading 1)
     (org-get-next-sibling)))
 
-(defun org-books-get-headers ()
-  "Return list of categories under which books can be filed.
+(defmacro with-org-books-file (&rest body)
+  "A convenience macro to execute BODY within `org-books-file'.
+Switches to the file and warns if it doesn't exist."
+  `(if org-books-file
+       (with-current-buffer (find-file-noselect org-books-file)
+         ,@body)
+     (message "org-books-file not set")))
 
-Each item in list is a pair of title (propertized) and marker
-specifying the position in the file."
-  (let ((helm-org-headings-max-depth org-books-file-depth))
-    (helm-org--get-candidates-in-file org-books-file helm-org-headings-fontify t nil t)))
+(defun org-books--select-parent-heading ()
+  "Move to the heading under which the book(s) should be added.
+Currently using consult."
+  (let ((match (format "level<=%d" org-books-file-depth)))
+    (consult-org-heading match)))
 
 ;;;###autoload
 (defun org-books-add-book (title author &optional props)
   "Add a book (specified by TITLE and AUTHOR) to the `org-books-file'.
-
 Optionally apply PROPS."
-  (interactive
-   (let ((completion-ignore-case t))
-     (list
-      (read-string "Book Title: ")
-      (s-join ", " (completing-read-multiple "Author(s): " (org-books-all-authors))))))
-  (if org-books-file
-    (with-current-buffer (find-file-noselect org-books-file)
-      (let ((headers (org-books-get-headers)))
-        (if headers
-            (helm :sources (helm-build-sync-source "org-book categories"
-                             :candidates headers
-                             :action (lambda (pos) (org-books--insert-at-pos pos title author props)))
-                  :buffer "*helm org-books add*")
-          (goto-char (point-max))
-          (org-books--insert 1 title author props)
-          (save-buffer))))
-    (message "org-books-file not set")))
+  (interactive)
+  (with-org-books-file
+   (org-books--select-parent-heading)
+   (org-fold-show-all)
+   (org-books--insert title author props)
+   (save-buffer)))
 
 (defun org-books-add-many (url-ht)
-  "Add many books at once (using links in the BOOK-URLS list) to the `org-books file'.
+  "Add many books at once (using links in the URL-HT table).
 Currently only supports LibraryThing."
-  (with-current-buffer (find-file-noselect org-books-file)
-    (let ((headers (org-books-get-headers))
-          (fn (ht-get url-ht :fn))
-          (book-urls (ht-get url-ht :urls)))
-      (helm :sources (helm-build-sync-source "org-book categories"
-                       :candidates headers
-                       :action (lambda (pos)
-                                 (dolist (url book-urls)
-                                   (apply #'org-books--insert-at-pos
-                                          pos
-                                          (funcall fn url)))))
-            :buffer "*helm org-books add*"))))
+  (interactive)
+  (let ((fn (map-elt url-ht :fn))
+        (urls (map-elt url-ht :urls)))
+    (with-org-books-file
+     (org-books--select-parent-heading)
+     (org-fold-show-all)
+     (dolist (url urls)
+       (let ((details (funcall fn url)))
+         (save-excursion
+           (apply #'org-books--insert details)))))
+    (save-buffer)))
 
 (defun org-books--safe-max (xs)
   "Extract the maximum value of XS with special provisions for nil and '(0).
@@ -584,7 +527,7 @@ finding the one with the highest index."
     (org-books--safe-max)))
 
 (defun org-books--format-property (name times-read)
-  "Return a property name string given its parameters.
+  "Return a property name string given its NAME and TIMES-READ number.
 Based on the number of times a book has been read,
 the string will either be a bare NAME, or NAME-N,
 where N is the current read count.
@@ -637,6 +580,14 @@ the rating and finish date are marked separately for each re-read."
            (rating-prop (org-books--format-property "MY-RATING" times-read)))
       (org-set-property rating-prop (number-to-string rating))
       (org-set-property finished-prop (org-books--today-string)))))
+
+;;;###autoload
+(defun org-books-jump-to-reading ()
+  "Jump to a book currently being read.
+Can be used from anywhere, not just org-books mode."
+  (interactive)
+  (with-org-books-file
+   (consult-org-heading "/+READING")))
 
 (provide 'org-books)
 ;;; org-books.el ends here
