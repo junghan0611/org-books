@@ -76,7 +76,8 @@ LibraryThing node. Slows down scraping."
     ("openlibrary\\.org" . org-books-get-details-openlibrary)
     ("librarything\\.com/nseries" . org-books-librarything-series-get-urls)
     ("librarything\\.com" . org-books-get-details-librarything)
-    ("https://app.thestorygraph.com/books/" . org-books-get-details-thestorygraph))
+    ("app\\.thestorygraph\\.com/books/" . org-books-get-details-thestorygraph)
+    ("app\\.thestorygraph\\.com/series/" . org-books-thestorygraph-series-get-urls))
   "Pairs of url patterns and functions taking url and returning book details.
 Check documentation of `org-books-get-details' for
 return structure from these functions."
@@ -423,6 +424,13 @@ If a series cannot be found, return nil."
        (-uniq)
        (-map #'s-snake-case)))
 
+(defun org-books-thestorygraph-series-get-urls (series-url)
+  "Collect the URLs of a book series from TheStoryGraph at once using SERIES-URL."
+  (--> (enlive-fetch series-url)
+       (enlive-query-all it [.book-title-author-and-series > h3 > a])
+       (--map (s-prepend "https://app.thestorygraph.com" (enlive-attr it 'href)) it)
+       (ht (:fn #'org-books-get-details-thestorygraph) (:urls it))))
+
 (defun org-books-get-url-from-isbn (isbn)
   "Make and return openlibrary url from ISBN."
   (concat "https://openlibrary.org/api/books?bibkeys=ISBN:" isbn "&jscmd=data&format=json"))
@@ -560,7 +568,7 @@ Optionally apply PROPS."
 
 (defun org-books-add-many (url-ht)
   "Add many books at once (using links in the URL-HT table).
-Currently only supports LibraryThing."
+Supports LibraryThing and TheStoryGraph."
   (interactive)
   (let ((fn (map-elt url-ht :fn))
         (urls (map-elt url-ht :urls)))
