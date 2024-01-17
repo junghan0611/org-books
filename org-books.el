@@ -365,11 +365,14 @@ If a series cannot be found, return nil."
          (author (org-books-get-thestorygraph-author page-node))
          (pages-year (org-books-get-thestorygraph-pages-year page-node))
          (numpages (map-elt pages-year :pages))
-         (year (map-elt pages-year :year)))
+         (year (map-elt pages-year :year))
+         (rating (org-books-get-thestorygraph-rating page-node))
+         (tags (org-books-get-thestorygraph-tags page-node)))
     (list title author `(("YEAR" . ,year)
                          ("PAGES" . ,numpages)
-                         ;; ("THESTORYGRAPH-RATING" . ,lt-rating)
-                         ("THESTORYGRAPH-URL" . ,url)))))
+                         ("THESTORYGRAPH-RATING" . ,rating)
+                         ("THESTORYGRAPH-URL" . ,url)
+                         (:tags . ,tags)))))
 
 (defun org-books-get-thestorygraph-author (page-node)
   "Retrieve author name from PAGE-NODE of a TheStoryGraph page."
@@ -393,7 +396,8 @@ If a series cannot be found, return nil."
     (when (> (length series-and-author) 3)
       (->> (enlive-query-all (-first-item series-and-author) [a])
            (-map #'enlive-text)
-           (s-join " ")))))
+           (s-join " ")
+           (s-replace "#" "")))))
 
 (defun org-books-get-thestorygraph-pages-year (page-node)
   "Retrieve page and publication date from PAGE-NODE of a TheStoryGraph page."
@@ -404,6 +408,20 @@ If a series cannot be found, return nil."
     (when (string-match regex text)
       (list :pages (match-string 1 text)
             :year (match-string 2 text)))))
+
+(defun org-books-get-thestorygraph-rating (page-node)
+  "Retrieve rating from PAGE-NODE of a TheStoryGraph page."
+  (->> (enlive-query page-node [.average-star-rating])
+       (enlive-text)
+       (s-trim)))
+
+(defun org-books-get-thestorygraph-tags (page-node)
+  "Retrieve tags from PAGE-NODE of a TheStoryGraph page."
+  (->> (enlive-query-all page-node [.book-page-tag-section > span])
+       (-map #'enlive-text)
+       (--filter (not (-contains? '("fiction" "fantasy") it)))
+       (-uniq)
+       (-map #'s-snake-case)))
 
 (defun org-books-get-url-from-isbn (isbn)
   "Make and return openlibrary url from ISBN."
@@ -487,9 +505,10 @@ AUTHOR and properties from PROPS go as org-property."
     (org-set-property "ADDED" (org-books--today-string))
     (dolist (prop props)
       (when (cdr prop) ; Make sure each property has a value.
-        (if (eq (car prop) :genres)
-            (org-books-add-genre-tags (cdr prop))
-          (org-set-property (car prop) (cdr prop)))))
+        (cond
+         ((eq (car prop) :genres) (org-books-add-genre-tags (cdr prop)))
+         ((eq (car prop) :tags) (org-set-tags (cdr prop)))
+         (t (org-set-property (car prop) (cdr prop))))))
     (buffer-string)))
 
 (defun org-books-add-genre-tags (genre-list)
