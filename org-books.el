@@ -75,7 +75,8 @@ LibraryThing node. Slows down scraping."
     ("goodreads\\.com" . org-books-get-details-goodreads)
     ("openlibrary\\.org" . org-books-get-details-openlibrary)
     ("librarything\\.com/nseries" . org-books-librarything-series-get-urls)
-    ("librarything\\.com" . org-books-get-details-librarything))
+    ("librarything\\.com" . org-books-get-details-librarything)
+    ("https://app.thestorygraph.com/books/" . org-books-get-details-thestorygraph))
   "Pairs of url patterns and functions taking url and returning book details.
 Check documentation of `org-books-get-details' for
 return structure from these functions."
@@ -356,6 +357,53 @@ If a series cannot be found, return nil."
        (enlive-query-all it [.gss_title > a])
        (--map (s-prepend "https://www.librarything.com" (enlive-attr it 'href)) it)
        (ht (:fn #'org-books-get-details-librarything) (:urls it))))
+
+(defun org-books-get-details-thestorygraph (url)
+  "Get book details from a TheStoryGraph URL."
+  (let* ((page-node (enlive-fetch url))
+         (title (org-books-get-thestorygraph-title page-node))
+         (author (org-books-get-thestorygraph-author page-node))
+         (pages-year (org-books-get-thestorygraph-pages-year page-node))
+         (numpages (map-elt pages-year :pages))
+         (year (map-elt pages-year :year)))
+    (list title author `(("YEAR" . ,year)
+                         ("PAGES" . ,numpages)
+                         ;; ("THESTORYGRAPH-RATING" . ,lt-rating)
+                         ("THESTORYGRAPH-URL" . ,url)))))
+
+(defun org-books-get-thestorygraph-author (page-node)
+  "Retrieve author name from PAGE-NODE of a TheStoryGraph page."
+  (-> page-node
+      (enlive-query-all [.book-title-author-and-series > p > a])
+      (-last-item)
+      (enlive-text)))
+
+(defun org-books-get-thestorygraph-title (page-node)
+  "Retrieve book title from PAGE-NODE of a TheStoryGraph page."
+  (let ((title (-> page-node
+                   (enlive-query [.book-title-author-and-series > h3])
+                   (enlive-text)
+                   (s-trim)))
+        (series (org-books-get-thestorygraph-series page-node)))
+    (concat title (when series (concat " (" series ")")))))
+
+(defun org-books-get-thestorygraph-series (page-node)
+  "Retrieve series info from PAGE-NODE of a TheStoryGraph page."
+  (let ((series-and-author (enlive-query-all page-node [.book-title-author-and-series > p])))
+    (when (> (length series-and-author) 3)
+      (->> (enlive-query-all (-first-item series-and-author) [a])
+           (-map #'enlive-text)
+           (s-join " ")))))
+
+(defun org-books-get-thestorygraph-pages-year (page-node)
+  "Retrieve page and publication date from PAGE-NODE of a TheStoryGraph page."
+  (let ((text (enlive-text (enlive-query page-node [.col-span-2 > p])))
+        (regex (rx (* space) (group (+ digit)) " pages"
+                   (+? anything) "first pub " (group (+ digit))
+                   (* anything))))
+    (when (string-match regex text)
+      (list :pages (match-string 1 text)
+            :year (match-string 2 text)))))
 
 (defun org-books-get-url-from-isbn (isbn)
   "Make and return openlibrary url from ISBN."
