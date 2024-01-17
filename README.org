@@ -12,11 +12,12 @@ See the [[https://github.com/lepisma/org-books][original version]] for a tutoria
 
 * Differences from the original version
 
-- New: *NO HELM.* The helm dependency has been dropped in favour of consult.
+- NEW: added support for TheStoryGraph (including series URLs!).
+- *NO HELM.* The helm dependency has been dropped in favour of consult.
 - More details from Goodreads.
   + Automate genre tagging by customizing the =org-books-genre-tag-associations= variable! (More info below.)
 - Support for OpenLibrary and LibraryThing.
-  + Can add whole series from Goodreads and LibraryThing (just use the series URL)!
+  + Can add whole series from TheStoryGraph and LibraryThing (just use the series URL)!
   + When scraping from LibraryThing, optionally fetch additional data from Amazon automatically (see the =org-books-librarything-get-amazon-details= variable). Try with a series link for extra oomph!
 - Automated property and state assignment with in-built functions.
 - Re-read tracking.
@@ -25,6 +26,11 @@ See the [[https://github.com/lepisma/org-books][original version]] for a tutoria
 - Quality of life improvements:
   + If org-books-add-url fails, it will ask to retry.
   + Helm call for location of new book has been simplified, and should run faster.
+
+** TheStoryGraph tags
+
+One of TheStoryGraph's features is its unique and intuitive tag system.
+Org-books will fetch those tags for you and add them straight to the book heading!
 
 ** Goodreads details
 
