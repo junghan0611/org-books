@@ -545,7 +545,8 @@ TITLE, AUTHOR and PROPS are formatted using `org-books-format'."
   "A convenience macro to execute BODY within `org-books-file'.
 Switches to the file and warns if it doesn't exist."
   `(if org-books-file
-       (with-current-buffer (find-file-noselect org-books-file)
+       (progn
+         (find-file org-books-file)
          ,@body)
      (message "org-books-file not set")))
 
